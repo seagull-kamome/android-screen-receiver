@@ -1,0 +1,28 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "jp.kamome.screenreceiver"
+    compileSdk = 35
+    buildToolsVersion = "34.0.0"
+    defaultConfig {
+        applicationId = "jp.kamome.screenreceiver"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1.0"
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+}
+
+dependencies {
+    // HTTP（送信ページの配信）と WebSocket（映像の受信）を同じポートで扱う小さなサーバー
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+}

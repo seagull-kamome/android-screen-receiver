@@ -1,0 +1,9 @@
+build/
+.gradle/
+.kotlin/
+local.properties
+*.apk
+.gradle-home
+.android-home
+.tmp/
+.deploy.log
