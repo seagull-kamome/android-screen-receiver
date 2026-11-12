@@ -14,6 +14,15 @@ WebRTC は使わず、同じ LAN 内を前提にして、WebSocket で、映像�
 
 画面共有と WebCodecs は、「安全なページ」でしか動きません。Android が配信するページは HTTP なので、そのままでは安全なページと見なされません。**拡張機能のページは、安全なページとして扱われるため、Chrome の設定変更が不要**です。
 
+## インストール
+
+[Releases](https://github.com/seagull-kamome/android-screen-receiver/releases) から、次のファイルをダウンロードします。
+
+- `screen-receiver-<バージョン>-debug.apk`: Android アプリです。Android 端末にインストールします。デバッグ署名のビルドなので、提供元不明のアプリの許可が必要な場合があります。
+- `screen-receiver-extension-<バージョン>.zip`: Chrome 拡張機能（送信側）です。ChromeOS や Windows の Chrome に入れます（下の「使い方」を参照）。アプリの待機画面から、近距離共有や HTTP で、入手することもできます。
+
+自分でビルドする場合は、下の「ビルド」を参照してください。
+
 ## 使い方
 
 ### Chrome 拡張機能（おすすめ）
@@ -21,7 +30,10 @@ WebRTC は使わず、同じ LAN 内を前提にして、WebSocket で、映像�
 初回だけ、拡張機能を入れます。
 
 1. Android でアプリを開きます（待機画面に、接続先と手順が表示されます）。
-2. Chrome で、`http://<Android の IP>:8080/extension.zip` をダウンロードします（安全でないダウンロードとしてブロックされたら、「保存」を選びます）。
+2. 拡張機能の zip を入手します。いずれかの方法です。
+   - [Releases](https://github.com/seagull-kamome/android-screen-receiver/releases) の `screen-receiver-extension-<バージョン>.zip` をダウンロードします（HTTPS なので、ブロックされません）。
+   - Chrome で、`http://<Android の IP>:8080/extension.zip` をダウンロードします（安全でないダウンロードとしてブロックされたら、「保存」を選びます）。
+   - Android の待機画面の「拡張機能を共有」から、近距離共有（Quick Share）などで、送ります。
 3. zip を展開します（ChromeOS の「ファイル」アプリでは、zip を右クリックして展開するか、開いて中身をすべて、新しいフォルダへコピーします）。
 4. Chrome で `chrome://extensions` を開き、「デベロッパー モード」をオンにして、「パッケージ化されていない拡張機能を読み込む」から、展開したフォルダを選びます。
 
