@@ -64,3 +64,11 @@ tools/run-test.sh 192.168.3.229:8080 1920 1080 30 20   # 宛先、幅、高さ�
 - 音声は送りません。Android 側の画面のタッチを、PC へ返す機能もありません。
 - 解像度は、端末の H.264 デコーダが対応する範囲に限られます。
 - 拡張画面（空いた領域を、ウィンドウの置き場にする）ではなく、画面や、ウィンドウの共有（複製）です。
+
+## 利用しているライブラリ
+
+- [NanoHTTPD](https://github.com/NanoHttpd/nanohttpd)（HTTP と WebSocket のサーバー、BSD 3-Clause）
+
+## ライセンス
+
+[MIT License](LICENSE)
