@@ -55,7 +55,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
         overlay = TextView(this).apply {
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.BLACK)
-            textSize = 15f
+            textSize = 14f
             setPadding(48, 48, 48, 48)
         }
         root.addView(overlay, FrameLayout.LayoutParams(
@@ -73,7 +73,9 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
 
     private fun startServer() {
         for (p in PORTS) {
-            val s = StreamServer(p, { assets.open("sender.html").bufferedReader().use { it.readText() } }, this)
+            val s = StreamServer(p, { name ->
+                try { assets.open(name).use { it.readBytes() } } catch (e: java.io.IOException) { null }
+            }, this)
             try {
                 s.start(0, false) // 読み取りの時間切れなし（映像が止まっても、接続を保つ）
                 server = s
@@ -98,18 +100,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
     private fun showIdleOverlay() {
         val urls = addresses().map { "http://$it:$port" }
         val first = urls.firstOrNull() ?: "(Wi-Fi に接続してください)"
+        val host = first.removePrefix("http://")
         overlay.text = buildString {
             appendLine("Screen Receiver")
+            appendLine(if (senderConnected) "状態: 送信側が接続しました。映像を待っています…" else "状態: 待機中    接続先: $host")
             appendLine()
-            appendLine(if (senderConnected) "状態: 送信側が接続しました。映像を待っています…" else "状態: 待機中")
+            appendLine("【おすすめ】Chrome 拡張機能（Chrome の設定変更が不要）")
+            appendLine("  初回: Chrome で $first/extension.zip をダウンロードして展開し（ブロックされたら「保存」）、")
+            appendLine("        chrome://extensions →「デベロッパー モード」をオン →「パッケージ化されていない拡張機能を読み込む」→ 展開したフォルダを選ぶ")
+            appendLine("  以降: 拡張機能のアイコンを押す → 接続先に「$host」を入力 →「共有を開始」")
             appendLine()
-            appendLine("【初回だけ】ChromeOS（または Windows）の Chrome で、次のページを開きます。")
-            appendLine("  chrome://flags/#unsafely-treat-insecure-origin-as-secure")
-            appendLine("「Insecure origins treated as secure」の欄に、次を入力して「有効（Enabled）」にし、Chrome を再起動します。")
-            appendLine("  $first")
-            appendLine()
-            appendLine("【映すとき】同じ Wi-Fi につないだ Chrome で、次の URL を開いて、「共有を開始」を押します。")
-            urls.ifEmpty { listOf(first) }.forEach { appendLine("  $it") }
+            appendLine("【拡張機能を使わない場合】Chrome の設定が必要です")
+            appendLine("  chrome://flags/#unsafely-treat-insecure-origin-as-secure に「$first」を入力して有効にし、Chrome を再起動 → Chrome で $first を開く")
             appendLine()
             appendLine("画面をタップすると、この案内を隠せます。")
         }

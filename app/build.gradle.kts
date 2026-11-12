@@ -21,6 +21,22 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 
+// 送信用のスクリプト（sender.js）と、Chrome 拡張機能（extension.zip）を、アプリの assets に入れる。
+// 元は extension/ の 1 か所にあり、Android が配信するページと、拡張機能で、同じスクリプトを使う
+val webAssets = layout.buildDirectory.dir("generated/web-assets")
+val syncSenderJs = tasks.register<Copy>("syncSenderJs") {
+    from(rootProject.file("extension/sender.js"))
+    into(webAssets.map { it.dir("js") })
+}
+val zipExtension = tasks.register<Zip>("zipExtension") {
+    from(rootProject.file("extension"))
+    archiveFileName.set("extension.zip")
+    destinationDirectory.set(webAssets.map { it.dir("zip") })
+}
+android.sourceSets.getByName("main").assets.srcDir(webAssets.map { it.dir("js") })
+android.sourceSets.getByName("main").assets.srcDir(webAssets.map { it.dir("zip") })
+tasks.named("preBuild") { dependsOn(syncSenderJs, zipExtension) }
+
 dependencies {
     // HTTP（送信ページの配信）と WebSocket（映像の受信）を同じポートで扱う小さなサーバー
     implementation("org.nanohttpd:nanohttpd:2.3.1")

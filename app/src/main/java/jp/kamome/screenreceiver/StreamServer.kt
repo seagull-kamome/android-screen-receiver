@@ -4,6 +4,7 @@ import android.util.Log
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
@@ -18,7 +19,7 @@ import java.util.concurrent.Executors
  */
 class StreamServer(
     port: Int,
-    private val senderPage: () -> String,
+    private val readAsset: (String) -> ByteArray?,
     private val listener: Listener,
 ) : NanoWSD(port) {
 
@@ -32,12 +33,23 @@ class StreamServer(
     @Volatile private var current: Connection? = null
     private val sender = Executors.newSingleThreadExecutor()
 
+    /** 配信するもの: 送信ページ、送信スクリプト、Chrome 拡張機能（zip） */
     override fun serveHttp(session: IHTTPSession): Response = when (session.uri) {
-        "/", "/index.html" ->
-            newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", senderPage())
-                .apply { addHeader("Cache-Control", "no-store") }
-        else -> newFixedLengthResponse(Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "not found")
+        "/", "/index.html" -> asset("sender.html", "text/html; charset=utf-8")
+        "/sender.js" -> asset("sender.js", "text/javascript; charset=utf-8")
+        "/extension.zip" -> asset("extension.zip", "application/zip")
+            ?.apply { addHeader("Content-Disposition", "attachment; filename=\"screen-receiver-extension.zip\"") }
+        else -> notFound()
+    } ?: notFound()
+
+    private fun asset(name: String, mime: String): Response? {
+        val bytes = readAsset(name) ?: return null
+        return newFixedLengthResponse(Response.Status.OK, mime, ByteArrayInputStream(bytes), bytes.size.toLong())
+            .apply { addHeader("Cache-Control", "no-store") }
     }
+
+    private fun notFound(): Response =
+        newFixedLengthResponse(Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "not found")
 
     override fun openWebSocket(handshake: IHTTPSession): WebSocket = Connection(handshake)
 
