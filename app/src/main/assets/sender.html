@@ -15,12 +15,31 @@
   .problem { background: #fdd; color: #600; padding: .6rem 1rem; border-radius: .4rem; margin: .5rem 0; }
   @media (prefers-color-scheme: dark) { .problem { background: #522; color: #fcc; } }
   #stat { font-variant-numeric: tabular-nums; }
+  .confirm { border: 2px solid #1a73e8; border-radius: .5rem; padding: .6rem 1rem; margin: 1rem 0; }
+  .confirm.warn { border-color: #d93025; background: #fdd; color: #600; }
+  #confirmText { white-space: pre-line; font-size: 1.05rem; }
+  @media (prefers-color-scheme: dark) { .confirm.warn { background: #522; color: #fcc; } }
+  #landing { border: 1px solid #8884; border-radius: .5rem; padding: .2rem 1rem; margin: 1rem 0; }
+  #devPin { font-size: 1.8rem; letter-spacing: .15em; }
+  a.btn { display: inline-block; font-weight: bold; padding: .5rem 1rem; border-radius: .4rem; background: #1a73e8; color: #fff; text-decoration: none; }
   pre { white-space: pre-wrap; font-size: .8rem; opacity: .8; }
 </style>
 </head>
 <body>
 <h1>この画面を Android に映す</h1>
 <div id="problems"></div>
+
+<section id="landing" hidden>
+  <p>この端末: <b id="devName"></b>　PIN: <b id="devPin"></b><br>
+    <small>Android の画面に表示されている PIN と同じか、確かめてください。</small></p>
+  <p id="extInstalled" hidden><a id="extOpen" class="btn" href="#">拡張機能で映す（接続先と PIN が入力済みで開きます）</a></p>
+  <p id="extMissing" hidden>Chrome 拡張機能を使うと、Chrome の設定変更が要りません。
+    <a href="/extension.zip">拡張機能をダウンロード</a>（入れ方は、Android の待機画面か README を見てください）。</p>
+  <details><summary>拡張機能のリンクを、手動で開く</summary>
+    <p><small>次のリンクを、コピーして、Chrome のアドレス欄に貼り付けます。</small><br>
+    <input id="extLink" readonly size="70"></p></details>
+</section>
+
 
 <div class="row">
   <label>解像度（上限）
@@ -52,9 +71,15 @@
   <button id="start" class="primary">共有を開始</button>
   <button id="stop" disabled>停止</button>
 </div>
+<div id="confirm" class="confirm" hidden>
+  <p id="confirmText"></p>
+  <button id="confirmYes" class="primary">この端末へ共有</button>
+  <button id="confirmNo">やめる</button>
+</div>
 <p id="stat">待機中</p>
 <pre id="log"></pre>
 
+<script src="landing.js"></script>
 <script src="sender.js"></script>
 </body>
 </html>

@@ -15,6 +15,10 @@
   .problem { background: #fdd; color: #600; padding: .6rem 1rem; border-radius: .4rem; margin: .5rem 0; }
   @media (prefers-color-scheme: dark) { .problem { background: #522; color: #fcc; } }
   #stat { font-variant-numeric: tabular-nums; }
+  .confirm { border: 2px solid #1a73e8; border-radius: .5rem; padding: .6rem 1rem; margin: 1rem 0; }
+  .confirm.warn { border-color: #d93025; background: #fdd; color: #600; }
+  #confirmText { white-space: pre-line; font-size: 1.05rem; }
+  @media (prefers-color-scheme: dark) { .confirm.warn { background: #522; color: #fcc; } }
   pre { white-space: pre-wrap; font-size: .8rem; opacity: .8; }
 </style>
 </head>
@@ -58,6 +62,11 @@
 <div class="row">
   <button id="start" class="primary">共有を開始</button>
   <button id="stop" disabled>停止</button>
+</div>
+<div id="confirm" class="confirm" hidden>
+  <p id="confirmText"></p>
+  <button id="confirmYes" class="primary">この端末へ共有</button>
+  <button id="confirmNo">やめる</button>
 </div>
 <p id="stat">待機中</p>
 <pre id="log"></pre>

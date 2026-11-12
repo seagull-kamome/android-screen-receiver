@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 共有する拡張機能（zip）を置く場所。共有メニュー経由で、他のアプリに、読み取りだけを許可する -->
+<paths>
+    <cache-path name="share" path="share/" />
+</paths>

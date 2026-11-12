@@ -3,12 +3,30 @@
   "name": "Screen Receiver 送信",
   "version": "0.1.0",
   "description": "Chrome の画面を、Screen Receiver アプリ（Android）へ、Wi-Fi で映します。",
-  "permissions": ["storage"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "画面を Android に映す" },
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "画面を Android に映す"
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApi3Ka7MhM9Ztsin1NqJEm9h/L8QUB6K0ErOpESSlyIlL5IUP+vnmfL8sl9LLWA8bZAZwPFaF6tAH3YQw6mCaKDtv9QPrjoQEJdoA7DTKA2JGeyUJieN1SPaX8MJO54ZD8ZzxpUqBJZtaLMG8wWfK21l5HzreLO3I/lBhqqOKm3NglaPTmvxd2623Vw/MTnuc7sGygeT1eLRquZ7OkmHYQxgtIzEv8gkvBXvuYAzoITCzGYBM+PCyZwIzlpg82dUg96hTXky5TNtsE8Ovo3HuSx3B2pIZ5xo62B4L//H+x8rxLbtZVDOjnl0ocxEltte81KMNiJRIxplFzI+zQUi7GwIDAQAB",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sender.html",
+        "icons/icon16.png"
+      ],
+      "matches": [
+        "http://*/*"
+      ]
+    }
+  ]
 }

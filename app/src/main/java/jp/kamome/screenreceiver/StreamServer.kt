@@ -15,11 +15,13 @@ import java.util.concurrent.Executors
  * 通信の取り決め:
  * - 送信側 → 受信側（文字）: `{"type":"config","width":W,"height":H,"fps":F}`（映像を始める前に 1 回）、`ping`（接続維持）
  * - 送信側 → 受信側（バイナリ）: `[フラグ 1 バイト（bit0 = キーフレーム）][時刻 8 バイト（ビッグエンディアン、マイクロ秒）][H.264 Annex-B]`
- * - 受信側 → 送信側（文字）: `{"type":"keyframe"}`（キーフレームの要求）
+ * - 受信側 → 送信側（文字）: `{"type":"keyframe"}`（キーフレームの要求）、
+ *   `{"type":"hello","name":"端末名","pin":"1234"}`（接続の直後に 1 回。送信側が、接続先の端末を確かめるため）
  */
 class StreamServer(
     port: Int,
     private val readAsset: (String) -> ByteArray?,
+    private val deviceInfo: () -> DeviceInfo,
     private val listener: Listener,
 ) : NanoWSD(port) {
 
@@ -37,6 +39,9 @@ class StreamServer(
     override fun serveHttp(session: IHTTPSession): Response = when (session.uri) {
         "/", "/index.html" -> asset("sender.html", "text/html; charset=utf-8")
         "/sender.js" -> asset("sender.js", "text/javascript; charset=utf-8")
+        "/landing.js" -> asset("landing.js", "text/javascript; charset=utf-8")
+        "/info.json" -> newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", infoJson().toString())
+            .apply { addHeader("Cache-Control", "no-store") }
         "/extension.zip" -> asset("extension.zip", "application/zip")
             ?.apply { addHeader("Content-Disposition", "attachment; filename=\"screen-receiver-extension.zip\"") }
         else -> notFound()
@@ -46,6 +51,10 @@ class StreamServer(
         val bytes = readAsset(name) ?: return null
         return newFixedLengthResponse(Response.Status.OK, mime, ByteArrayInputStream(bytes), bytes.size.toLong())
             .apply { addHeader("Cache-Control", "no-store") }
+    }
+
+    private fun infoJson(): JSONObject = deviceInfo().let {
+        JSONObject().put("name", it.name).put("pin", it.pin).put("extensionId", it.extensionId)
     }
 
     private fun notFound(): Response =
@@ -67,6 +76,12 @@ class StreamServer(
             val old = synchronized(this@StreamServer) { current.also { current = this } }
             if (old != null) {
                 try { old.close(WebSocketFrame.CloseCode.GoingAway, "別の送信者に置き換えられました", false) } catch (e: IOException) { /* 切れていてもよい */ }
+            }
+            // 送信側が、接続先の端末を確かめられるよう、端末名と PIN を知らせる
+            try {
+                send(infoJson().apply { remove("extensionId"); put("type", "hello") }.toString())
+            } catch (e: IOException) {
+                Log.w(TAG, "hello の送信に失敗", e)
             }
             listener.onSenderConnected()
         }

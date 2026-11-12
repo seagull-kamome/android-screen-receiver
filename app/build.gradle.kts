@@ -41,4 +41,8 @@ dependencies {
     // HTTP（送信ページの配信）と WebSocket（映像の受信）を同じポートで扱う小さなサーバー
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("org.nanohttpd:nanohttpd-websocket:2.3.1")
+    // QR コードの生成（待機画面に、送信ページの URL を QR で表示する）
+    implementation("com.google.zxing:core:3.5.3")
+    // 共有メニュー（近距離共有など）へ、拡張機能の zip を渡すための FileProvider
+    implementation("androidx.core:core:1.13.1")
 }

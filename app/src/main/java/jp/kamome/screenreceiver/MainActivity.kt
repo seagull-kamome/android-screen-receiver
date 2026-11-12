@@ -1,6 +1,7 @@
 package jp.kamome.screenreceiver
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -9,23 +10,36 @@ import android.view.Gravity
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
 /**
- * 待機中は、接続のしかた（送信ページの URL と、Chrome の設定）を表示し、
+ * 待機中は、接続のしかた（QR コード、端末の PIN、拡張機能の入手）を表示し、
  * 送信側（Chrome）から映像が届いたら、全画面に表示する。画面をタップすると、案内の表示を切り替える。
  */
 class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
 
     private lateinit var root: FrameLayout
     private lateinit var surfaceView: SurfaceView
-    private lateinit var overlay: TextView
+    private lateinit var overlay: LinearLayout       // 案内の全体（左: 文章とボタン、右: PIN と QR）
+    private lateinit var overlayText: TextView
+    private lateinit var textColumn: ScrollView
+    private lateinit var qrColumn: LinearLayout
+    private lateinit var pinView: TextView
+    private lateinit var qrView: ImageView
+
+    private val identity by lazy { DeviceIdentity(this) }
+    private val extensionId by lazy { ExtensionInfo.id(this) }
 
     private var server: StreamServer? = null
     private var port = PORTS.first()
@@ -48,22 +62,69 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
         showIdleOverlay()
     }
 
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
     private fun buildViews() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         surfaceView = SurfaceView(this).also { it.holder.addCallback(this) }
         root.addView(surfaceView, FrameLayout.LayoutParams(1, 1, Gravity.CENTER))
-        overlay = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.BLACK)
-            textSize = 14f
-            setPadding(48, 48, 48, 48)
+
+        // 左: 文章と、共有のボタン
+        overlayText = TextView(this).apply { setTextColor(Color.WHITE); textSize = 14f }
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            val actions = listOf<Pair<String, () -> Unit>>(
+                "拡張機能を共有" to { shareExtension() },
+                "接続先を共有" to { shareAddress() },
+                "PIN を変更" to { identity.regenerate(); showIdleOverlay() },
+            )
+            for ((label, action) in actions) {
+                addView(Button(this@MainActivity).apply {
+                    text = label
+                    isAllCaps = false
+                    setOnClickListener { action() }
+                })
+            }
         }
+        textColumn = ScrollView(this).apply {
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(buttons)
+                addView(overlayText)
+            })
+        }
+
+        // 右: 端末の PIN と、送信ページの QR コード
+        pinView = TextView(this).apply { setTextColor(Color.WHITE); gravity = Gravity.CENTER }
+        qrView = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+        val caption = TextView(this).apply {
+            text = "カメラで読み取ると、送信ページが開きます"
+            setTextColor(Color.LTGRAY)
+            textSize = 12f
+            gravity = Gravity.CENTER
+        }
+        qrColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            addView(pinView)
+            addView(qrView, LinearLayout.LayoutParams(dp(210), dp(210)))
+            addView(caption)
+        }
+
+        overlay = LinearLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(textColumn)
+            addView(qrColumn)
+        }
+        applyOrientation()
         root.addView(overlay, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+
         // タップで案内の表示を切り替える
         root.setOnClickListener {
             if (overlay.visibility == View.VISIBLE) overlay.visibility = View.GONE
-            else showOverlay(translucent = streamWidth > 0)
+            else { updateOverlayContent(); showOverlay(translucent = streamWidth > 0) }
         }
         overlay.setOnClickListener { if (streamWidth > 0) overlay.visibility = View.GONE }
         // 画面の大きさが変わったら（回転など）、映像の枠を合わせ直す
@@ -71,11 +132,28 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
         setContentView(root)
     }
 
+    /** 横向きなら、左右に並べる。縦向きなら、上下に並べる */
+    private fun applyOrientation() {
+        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        overlay.orientation = if (landscape) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        textColumn.layoutParams = if (landscape) LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        qrColumn.layoutParams = if (landscape) LinearLayout.LayoutParams(dp(300), ViewGroup.LayoutParams.MATCH_PARENT)
+            else LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        overlay.requestLayout()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        applyOrientation()
+    }
+
     private fun startServer() {
         for (p in PORTS) {
-            val s = StreamServer(p, { name ->
-                try { assets.open(name).use { it.readBytes() } } catch (e: java.io.IOException) { null }
-            }, this)
+            val s = StreamServer(p,
+                { name -> try { assets.open(name).use { it.readBytes() } } catch (e: java.io.IOException) { null } },
+                { DeviceInfo(identity.name, identity.pin, extensionId) },
+                this)
             try {
                 s.start(0, false) // 読み取りの時間切れなし（映像が止まっても、接続を保つ）
                 server = s
@@ -97,24 +175,47 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
             .map { it.hostAddress ?: "" }
     } catch (e: Exception) { emptyList() }
 
-    private fun showIdleOverlay() {
-        val urls = addresses().map { "http://$it:$port" }
-        val first = urls.firstOrNull() ?: "(Wi-Fi に接続してください)"
-        val host = first.removePrefix("http://")
-        overlay.text = buildString {
-            appendLine("Screen Receiver")
-            appendLine(if (senderConnected) "状態: 送信側が接続しました。映像を待っています…" else "状態: 待機中    接続先: $host")
+    /** 送信側が接続する先（IP:ポート）。Wi-Fi につながっていなければ null */
+    private fun hostPort(): String? = addresses().firstOrNull()?.let { "$it:$port" }
+
+    // --- 案内 ---
+    private fun updateOverlayContent() {
+        val host = hostPort()
+        val shown = host ?: "(Wi-Fi に接続してください)"
+        val status = when {
+            streamWidth > 0 -> "受信中 ${streamWidth}×$streamHeight"
+            senderConnected -> "送信側が接続しました。映像を待っています…"
+            else -> "待機中"
+        }
+        overlayText.text = buildString {
+            appendLine("Screen Receiver    端末名: ${identity.name}")
+            appendLine("状態: $status")
+            appendLine("接続先: $shown")
             appendLine()
-            appendLine("【おすすめ】Chrome 拡張機能（Chrome の設定変更が不要）")
-            appendLine("  初回: Chrome で $first/extension.zip をダウンロードして展開し（ブロックされたら「保存」）、")
-            appendLine("        chrome://extensions →「デベロッパー モード」をオン →「パッケージ化されていない拡張機能を読み込む」→ 展開したフォルダを選ぶ")
-            appendLine("  以降: 拡張機能のアイコンを押す → 接続先に「$host」を入力 →「共有を開始」")
+            appendLine("【ChromeOS / Windows の Chrome で映す】")
+            appendLine("  1. 右の QR を、カメラで読み取る（または、Chrome で http://$shown/ を開く）")
+            appendLine("  2. 開いたページの「端末の PIN」が、右の PIN と同じか、確かめる")
+            appendLine("  3. 「拡張機能で映す」→「共有を開始」")
             appendLine()
-            appendLine("【拡張機能を使わない場合】Chrome の設定が必要です")
-            appendLine("  chrome://flags/#unsafely-treat-insecure-origin-as-secure に「$first」を入力して有効にし、Chrome を再起動 → Chrome で $first を開く")
+            appendLine("【拡張機能を、初めて入れるとき】")
+            appendLine("  下の「拡張機能を共有」で、近距離共有（Quick Share）などで送るか、開いたページの「拡張機能をダウンロード」から入手します。")
+            appendLine("  展開して、chrome://extensions →「デベロッパー モード」をオン →「パッケージ化されていない拡張機能を読み込む」で、展開したフォルダを選びます。")
+            appendLine()
+            appendLine("【拡張機能を使わない場合】Chrome のフラグ設定が必要です（README を参照）。")
             appendLine()
             appendLine("画面をタップすると、この案内を隠せます。")
         }
+        pinView.text = android.text.SpannableString("PIN\n${identity.pin}").apply {
+            setSpan(android.text.style.RelativeSizeSpan(0.4f), 0, 3, 0)
+            setSpan(android.text.style.RelativeSizeSpan(1.9f), 4, length, 0)
+            setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 4, length, 0)
+        }
+        pinView.textSize = 24f
+        host?.let { qrView.setImageBitmap(QrCode.bitmap("http://$it/", 600)) } ?: qrView.setImageDrawable(null)
+    }
+
+    private fun showIdleOverlay() {
+        updateOverlayContent()
         showOverlay(translucent = false)
     }
 
@@ -122,6 +223,29 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
     private fun showOverlay(translucent: Boolean) {
         overlay.setBackgroundColor(if (translucent) 0xCC000000.toInt() else Color.BLACK)
         overlay.visibility = View.VISIBLE
+    }
+
+    // --- 共有（近距離共有など） ---
+    private fun shareExtension() {
+        try {
+            Sharing.shareExtension(this)
+        } catch (e: Exception) {
+            Log.w(TAG, "拡張機能を共有できません", e)
+            overlayText.append("\n共有できませんでした: ${e.message}")
+        }
+    }
+
+    private fun shareAddress() {
+        val host = hostPort() ?: return
+        val text = buildString {
+            appendLine("Screen Receiver の接続先: $host")
+            appendLine("端末: ${identity.name}　PIN: ${identity.pin}")
+            appendLine("ブラウザで開く: http://$host/")
+            if (extensionId.isNotEmpty()) {
+                appendLine("拡張機能で開く（Chrome のアドレス欄に貼り付け）: chrome-extension://$extensionId/sender.html?target=$host&pin=${identity.pin}")
+            }
+        }.trim()
+        Sharing.shareAddress(this, text)
     }
 
     // --- 映像の枠（縦横比を保って、画面に収める） ---
@@ -149,8 +273,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, StreamServer.Listener {
             server?.requestKeyframe()
         } catch (e: Exception) {
             Log.e(TAG, "デコーダを開始できません", e)
-            overlay.text = "この端末では、${streamWidth}x$streamHeight の H.264 を復号できませんでした。\n送信側の解像度を下げてください。\n\n${e.message}"
-            overlay.visibility = View.VISIBLE
+            overlayText.text = "この端末では、${streamWidth}x$streamHeight の H.264 を復号できませんでした。\n送信側の解像度を下げてください。\n\n${e.message}"
+            showOverlay(translucent = false)
         }
     }
 

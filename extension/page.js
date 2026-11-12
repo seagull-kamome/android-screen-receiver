@@ -8,6 +8,9 @@
   for (const k of keys) {
     if (saved[k] != null && get(k)) get(k).value = saved[k];
   }
+  // QR や共有リンクから開いたときは、リンクの接続先（?target=）を優先する
+  const fromLink = new URLSearchParams(location.search).get('target');
+  if (fromLink) get('target').value = fromLink;
   for (const k of keys) {
     get(k).addEventListener('change', () => chrome.storage.local.set({ [k]: get(k).value }));
   }

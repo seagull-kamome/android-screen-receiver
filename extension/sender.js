@@ -64,6 +64,10 @@ function targetHost() {
   return /:\d+$/.test(host) ? host : host + ':8080';
 }
 
+let hello = null;         // 受信側（Android）が、接続の直後に知らせる { name, pin }
+let helloWaiters = [];
+let deviceLabel = '';     // 接続先の表示（端末名と PIN）
+
 function openSocket() {
   return new Promise((resolve, reject) => {
     const s = new WebSocket('ws://' + targetHost() + '/ws');
@@ -73,9 +77,73 @@ function openSocket() {
     s.onclose = () => { if (running) { log('接続が切れました'); stop(); } };
     s.onmessage = (e) => {
       if (typeof e.data !== 'string') return;
-      try { if (JSON.parse(e.data).type === 'keyframe') needKey = true; } catch (_) { /* 無視 */ }
+      try {
+        const m = JSON.parse(e.data);
+        if (m.type === 'keyframe') needKey = true;
+        else if (m.type === 'hello') { hello = m; for (const w of helloWaiters.splice(0)) w(m); }
+      } catch (_) { /* 無視 */ }
     };
   });
+}
+
+// 受信側からの hello（端末名と PIN）を待つ。古い受信アプリは送らないので、時間切れなら null
+function waitHello(ms = 2500) {
+  if (hello) return Promise.resolve(hello);
+  return new Promise((resolve) => {
+    helloWaiters.push(resolve);
+    setTimeout(() => resolve(hello), ms);
+  });
+}
+
+// 確認の欄を出して、「共有する」か「やめる」かを待つ
+function ask(text, warn) {
+  return new Promise((resolve) => {
+    const box = $('confirm');
+    $('confirmText').textContent = text;
+    box.className = warn ? 'confirm warn' : 'confirm';
+    box.hidden = false;
+    const done = (value) => {
+      box.hidden = true;
+      $('confirmYes').onclick = null;
+      $('confirmNo').onclick = null;
+      resolve(value);
+    };
+    $('confirmYes').onclick = () => done(true);
+    $('confirmNo').onclick = () => done(false);
+  });
+}
+
+// 接続した端末が、狙った端末かを確かめる。
+// - QR や共有リンクから開いたとき（?pin=）に、その PIN と一致すれば、そのまま進む
+// - 前に確認した端末（同じ接続先で、PIN が同じ）も、そのまま進む
+// - それ以外（初めて、または PIN が違う）は、Android の画面の PIN と見比べて、確認してもらう
+async function confirmDevice(host, info) {
+  const expected = new URLSearchParams(location.search).get('pin');
+  const storageKey = 'trusted:' + host;
+  let trusted = null;
+  try { trusted = localStorage.getItem(storageKey); } catch (_) { /* 使えなくてもよい */ }
+  if (info && info.pin && (info.pin === expected || info.pin === trusted)) return true;
+
+  let text;
+  let warn = true;
+  if (!info || !info.pin) {
+    text = '接続した端末の PIN を取得できませんでした（古い受信アプリかもしれません）。\nこのまま共有しますか？';
+  } else if (expected && info.pin !== expected) {
+    text = '【注意】QR や共有リンクで受け取った PIN（' + expected + '）と、接続した端末の PIN（' + info.pin + '）が違います。\n'
+      + '別の端末につながっている可能性があります。Android の画面の PIN を確かめてください。';
+  } else if (trusted && info.pin !== trusted) {
+    text = '【注意】この接続先（' + host + '）の PIN が、前回（' + trusted + '）と違います（今回: ' + info.pin + '）。\n'
+      + '別の端末に変わった可能性があります。Android の画面の PIN を確かめてください。';
+  } else {
+    warn = false;
+    text = '接続した端末: ' + (info.name || '（名前なし）') + '（' + host + '）\n端末の PIN: ' + info.pin + '\n'
+      + 'Android の画面に表示されている PIN と同じなら、「この端末へ共有」を押してください。';
+  }
+  const ok = await ask(text, warn);
+  if (ok && info && info.pin) {
+    try { localStorage.setItem(storageKey, info.pin); } catch (_) { /* 使えなくてもよい */ }
+  }
+  return ok;
 }
 
 async function pickEncoderConfig(base) {
@@ -200,6 +268,14 @@ async function start() {
   $('start').disabled = true;
   try {
     ws = await openSocket();
+    const info = await waitHello();
+    if (!(await confirmDevice(targetHost(), info))) {
+      log('共有を取りやめました（接続先の端末を確認できませんでした）');
+      stop();
+      return;
+    }
+    deviceLabel = info && info.pin ? (info.name || '') + ' PIN ' + info.pin : '';
+    if (deviceLabel) log('接続先: ' + deviceLabel);
     stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { ideal: maxW }, height: { ideal: maxH }, frameRate: { ideal: options.fps } },
       audio: false,
@@ -245,7 +321,7 @@ async function start() {
     }, 250));
     let lastBytes = 0, lastFrames = 0;
     timers.push(setInterval(() => {
-      $('stat').textContent = '送信中 ' + curW + '×' + curH + ': ' + (sentFrames - lastFrames) + ' fps, '
+      $('stat').textContent = '送信中 → ' + (deviceLabel ? deviceLabel + '  ' : '') + curW + '×' + curH + ': ' + (sentFrames - lastFrames) + ' fps, '
         + (((sentBytes - lastBytes) * 8) / 1000000).toFixed(1) + ' Mbps';
       lastBytes = sentBytes; lastFrames = sentFrames;
     }, 1000));
@@ -272,6 +348,10 @@ function stop() {
   curW = curH = 0;
   candidate = null;
   resizing = false;
+  hello = null;
+  helloWaiters = [];
+  deviceLabel = '';
+  $('confirm').hidden = true;
   $('start').disabled = problems.length > 0;
   $('stop').disabled = true;
   $('stat').textContent = wasRunning ? '停止しました' : '待機中';
